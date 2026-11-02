@@ -2,17 +2,32 @@
 let CSRF = '';
 
 async function jf(url, opts = {}) {
-  opts.headers = { 'x-csrf-token': CSRF, ...(opts.headers || {}) };
+  const headers = { 'x-csrf-token': CSRF, ...(opts.headers || {}) };
+  const body = opts.body;
+
+  if (body instanceof File || body instanceof Blob) {
+    // do not JSON stringify binary uploads
+    if (!headers['content-type']) {
+      headers['content-type'] = body.type || 'application/octet-stream';
+    }
+    const r = await fetch(url, { ...opts, headers, body });
+    const text = await r.text();
+    let data;
+    try { data = text ? JSON.parse(text) : {}; } catch { data = text; }
+    if (!r.ok) throw new Error(typeof data === 'object' ? (data.error || r.statusText) : (text || r.statusText));
+    return data;
+  }
+
+  opts.headers = headers;
   if (opts.body && !(opts.body instanceof FormData) && typeof opts.body !== 'string') {
     opts.headers['content-type'] = 'application/json';
     opts.body = JSON.stringify(opts.body);
   }
   const r = await fetch(url, opts);
-  if (r.status === 401) { location.href = '/login'; throw new Error('logged out'); }
-  const body = await r.text();
+  const bodyText = await r.text();
   let data;
-  try { data = body ? JSON.parse(body) : {}; } catch { data = body; }
-  if (!r.ok) throw new Error(typeof data === 'object' ? (data.error || r.statusText) : body || r.statusText);
+  try { data = bodyText ? JSON.parse(bodyText) : {}; } catch { data = bodyText; }
+  if (!r.ok) throw new Error(typeof data === 'object' ? (data.error || r.statusText) : (bodyText || r.statusText));
   return data;
 }
 
